@@ -2,17 +2,14 @@
     "configurations": [
         {
             "name": "Linux",
+            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "/usr/bin/gcc",
             "includePath": [
-                "${workspaceFolder}/**",
-                "/usr/include/",
-                "/usr/local/include",
-                "/usr/include/x86_64-linux-gnu"
+                "${workspaceFolder}/**"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/cpp",
             "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "gcc-x64"
+            "cppStandard": "c++17"
         }
     ],
     "version": 4

@@ -2,8 +2,12 @@
     "files.associations": {
         "stdio.h": "c",
         "unistd.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "dispatchqueue.h": "c",
+        "string.h": "c",
+        "stddef.h": "c",
+        "libio.h": "c"
     },
-    "C_Cpp.intelliSenseEngine": "Tag Parser",
+    "C_Cpp.intelliSenseEngine": "Default",
     "terminal.integrated.rendererType": "dom"
 }

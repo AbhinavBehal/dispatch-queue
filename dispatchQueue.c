@@ -18,9 +18,10 @@ void task_destroy(task_t *task) {
 
 dispatch_queue_t *dispatch_queue_create(queue_type_t queue_type) {
     dispatch_queue_t *new_queue = malloc(sizeof(dispatch_queue_t));
-    new_queue->type = queue_type;
+    new_queue->queue_type = queue_type;
     new_queue->front = NULL;
     new_queue->back = NULL;
+    return new_queue;
 }
 
 void dispatch_queue_destroy(dispatch_queue_t *queue) {
@@ -28,7 +29,7 @@ void dispatch_queue_destroy(dispatch_queue_t *queue) {
 }
 
 int dispatch_async(dispatch_queue_t *queue, task_t *task) {
-    
+
 }
 
 int dispatch_sync(dispatch_queue_t *queue, task_t *task) {
@@ -52,7 +53,7 @@ dispatch_queue_node_t *create_node(task_t *task) {
 
 void push(dispatch_queue_t *queue, task_t *task) {
     dispatch_queue_node_t *node = create_node(task);
-    if (queue->rear == NULL) {
+    if (queue->back == NULL) {
         queue->front = node;
         queue->back = node;
     } else {
@@ -61,7 +62,7 @@ void push(dispatch_queue_t *queue, task_t *task) {
     }
 }
 
-dispatch_queue_node_t pop(dispatch_queue_t *queue) {
+dispatch_queue_node_t *pop(dispatch_queue_t *queue) {
     if (queue->front == NULL) {
         return NULL;
     } else {
