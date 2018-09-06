@@ -2,7 +2,7 @@
  * File:   dispatchQueue.h
  * Author: robert
  *
- * Modified by: your UPI
+ * Modified by: abeh957
  */
 
 #ifndef DISPATCHQUEUE_H
@@ -10,7 +10,7 @@
 
 #include <pthread.h>
 #include <semaphore.h>
-    
+
 #define error_exit(MESSAGE)     perror(MESSAGE), exit(EXIT_FAILURE)
 
     typedef enum { // whether dispatching a task synchronously or asynchronously
@@ -40,7 +40,14 @@
 
     struct dispatch_queue_t {
         queue_type_t queue_type;            // the type of queue - serial or concurrent
+        dispatch_queue_node_t *front;
+        dispatch_queue_node_t *back;
     };
+
+    typedef struct dispatch_queue_node {
+        task_t *task;
+        dispatch_queue_node_t *next;
+    } dispatch_queue_node_t;
     
     task_t *task_create(void (*)(void *), void *, char*);
     
