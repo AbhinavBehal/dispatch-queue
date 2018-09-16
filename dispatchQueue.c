@@ -4,12 +4,11 @@
 #include "dispatchQueue.h"
 
 task_t *task_create(void (* work)(void *), void *param, char* name) {
-    task_t *new_task = malloc(sizeof(task_t));
-    strcpy(new_task->name, name);
-    new_task->work = work;
-    new_task->params = param;
-    // ASYNC by default
-    new_task->type = ASYNC;
+    task_t *task = (task_t *)malloc(sizeof(task_t));
+    task->work = work;
+    task->params = param;
+    strcpy(task->name, name);
+    return task;
 }
     
 void task_destroy(task_t *task) {
@@ -17,11 +16,14 @@ void task_destroy(task_t *task) {
 }
 
 dispatch_queue_t *dispatch_queue_create(queue_type_t queue_type) {
-    dispatch_queue_t *new_queue = malloc(sizeof(dispatch_queue_t));
-    new_queue->queue_type = queue_type;
-    new_queue->front = NULL;
-    new_queue->back = NULL;
-    return new_queue;
+    dispatch_queue_t *queue = malloc(sizeof(dispatch_queue_t));
+    queue->queue_type = queue_type;
+    queue->front = NULL;
+    queue->back = NULL;
+    sem_init(&queue->excl_sem, 0, 1);
+    sem_init(&queue->sem, 0, 0);
+    // TODO: start dispatcher thread here
+    return queue;
 }
 
 void dispatch_queue_destroy(dispatch_queue_t *queue) {
@@ -42,6 +44,21 @@ void dispatch_for(dispatch_queue_t *queue, long number, void (*work)(long)) {
 
 int dispatch_queue_wait(dispatch_queue_t *queue) {
 
+}
+
+void dispatch_thread(void *current_queue) {
+    dispatch_queue_t* queue = (dispatch_queue_t *) current_queue;
+
+    for (;;) {
+        sem_wait(&queue->sem);
+        sem_wait(&queue->excl_sem);
+        // get task from queue
+        dispatch_queue_node_t *node = pop(queue);
+        // submit task to thread pool
+        // clean up node?
+        // free task?
+        sem_post(&queue->excl_sem);
+    }
 }
 
 dispatch_queue_node_t *create_node(task_t *task) {

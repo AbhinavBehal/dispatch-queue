@@ -40,6 +40,8 @@
 
     struct dispatch_queue_t {
         queue_type_t queue_type;            // the type of queue - serial or concurrent
+        sem_t sem;                          // semaphore the dispatcher waits on until a task is in the queue
+        sem_t excl_sem;                     // semaphore threads wait on to get exclusive access to the queue
         dispatch_queue_node_t *front;
         dispatch_queue_node_t *back;
     };
