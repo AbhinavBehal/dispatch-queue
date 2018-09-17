@@ -10,10 +10,12 @@ task_t *task_create(void (* work)(void *), void *param, char* name) {
     task->work = work;
     task->params = param;
     strcpy(task->name, name);
+    sem_init(&task->sync_sem, 0, 0);
     return task;
 }
     
 void task_destroy(task_t *task) {
+    sem_destroy(&task->sync_sem);
     free(task);
 }
 
@@ -22,19 +24,23 @@ dispatch_queue_t *dispatch_queue_create(queue_type_t queue_type) {
     queue->queue_type = queue_type;
     queue->front = NULL;
     queue->back = NULL;
-    sem_init(&queue->excl_sem, 0, 1);
-    sem_init(&queue->sem, 0, 0);
+    queue->shutdown = false;
+    queue->waiting = false;
+    pthread_mutex_init(&queue->queue_mutex, NULL);
+    pthread_cond_init(&queue->queue_cond, NULL);
 
-    switch (queue_type) {
+    switch (queue->queue_type) {
     case CONCURRENT:
         queue->pool_size = get_nprocs();
         break;
     case SERIAL:
         queue->pool_size = 1;
         break;
+    default:
+        error_exit("Unknown queue_type");
     }
-    queue->thread_pool = (pthread_t *)malloc(sizeof(pthread_t) * queue->pool_size);
-    // TODO: Should this be using dispatch_queue_thread_t?
+    queue->thread_pool = malloc(sizeof(pthread_t) * queue->pool_size);
+
     for (int i = 0; i < queue->pool_size; ++i) {
         pthread_create(&queue->thread_pool[i], NULL, (void *)queue_thread, (void *)queue);
     }
@@ -43,58 +49,98 @@ dispatch_queue_t *dispatch_queue_create(queue_type_t queue_type) {
 }
 
 void dispatch_queue_destroy(dispatch_queue_t *queue) {
-    // TODO:
-    // use pthread_cancel here?
+    pthread_mutex_lock(&queue->queue_mutex);
+    queue->shutdown = true;
+    pthread_cond_broadcast(&queue->queue_cond);
+    pthread_mutex_unlock(&queue->queue_mutex);
+
+    for (int i = 0; i < queue->pool_size; ++i) {
+        // TODO check if cancel is the best way
+        // if it is, then remove queue::shutdown variable
+        pthread_cancel(queue->thread_pool[i]);
+    }
+    free(queue->thread_pool);
+
+    dispatch_queue_node_t *node = NULL;
+    while ((node = pop(queue)) != NULL) {
+        task_destroy(node->task);
+        free(node);
+    }
+    pthread_mutex_destroy(&queue->queue_mutex);
+    pthread_cond_destroy(&queue->queue_cond);
+    free(queue);
 }
 
-int dispatch_async(dispatch_queue_t *queue, task_t *task) {
-    // TODO: check if queue is in waiting state
-    sem_wait(&queue->excl_sem);
-    printf("task pushed\n");
-    push(queue, task);
-    sem_post(&queue->sem);
-    sem_post(&queue->excl_sem);
+void dispatch_async(dispatch_queue_t *queue, task_t *task) {
+    // TODO check if task should be destroyed if added after shutdown or wait
+    pthread_mutex_lock(&queue->queue_mutex);
+    if (!queue->shutdown && !queue->waiting) {
+        task->type = ASYNC;
+        push(queue, task);
+        pthread_cond_signal(&queue->queue_cond);
+    }
+    pthread_mutex_unlock(&queue->queue_mutex);
 }
 
-int dispatch_sync(dispatch_queue_t *queue, task_t *task) {
+void dispatch_sync(dispatch_queue_t *queue, task_t *task) {
+    // TODO check if task should be destroyed if added after shutdown or wait
+    pthread_mutex_lock(&queue->queue_mutex);
+    if (!queue->shutdown && !queue->waiting) {
+        task->type = SYNC;
+        push(queue, task);
+        pthread_cond_signal(&queue->queue_cond);
+        pthread_mutex_unlock(&queue->queue_mutex);
 
+        sem_wait(&task->sync_sem);
+        task_destroy(task);
+    } else {
+        pthread_mutex_unlock(&queue->queue_mutex);
+    }
 }
 
 void dispatch_for(dispatch_queue_t *queue, long number, void (*work)(long)) {
-
+    for (long i = 0; i < number; ++i) {
+        task_t *task = task_create((void (*)(void *))work, (void *)i, NULL);
+        dispatch_async(queue, task);
+    }
+    dispatch_queue_wait(queue);
+    // TODO: check if this should cleanup the queue
+    dispatch_queue_destroy(queue);
 }
 
-int dispatch_queue_wait(dispatch_queue_t *queue) {
-    // somehow signal the threads to gracefully stop
-    // pthread_cancel doesn't work
-    // HAVE TO MAKE EACH THREAD HAVE ITS OWN SEMAPHORE
-    // INCREMENT IT & HAVE THE THREAD CHECK TO SEE IF IT SHOULD STOP
-    /*for (int i = 0; i < queue->pool_size; ++i) {
-        pthread_cancel(queue->thread_pool[i]);
-    }*/
+void dispatch_queue_wait(dispatch_queue_t *queue) {
+    pthread_mutex_lock(&queue->queue_mutex);
+    queue->waiting = true;
+    pthread_cond_broadcast(&queue->queue_cond);
+    pthread_mutex_unlock(&queue->queue_mutex);
+
     for (int i = 0; i < queue->pool_size; ++i) {
         pthread_join(queue->thread_pool[i], NULL);
     }
-    return 0;
 }
 
 void queue_thread(void *dispatch_queue) {
-    printf("thread started\n");
-    dispatch_queue_t *queue = (dispatch_queue_t *)dispatch_queue;
-    for(;;) { // TODO: handle thread cleanup when destroying or waiting for queue (maybe signal threads to stop)
-        dispatch_queue_node_t *node = NULL;
-        if (sem_wait(&queue->sem) == -1) {
-            printf("SIGNALLED TO STOP\n");
+    dispatch_queue_t *queue = (dispatch_queue_t *) dispatch_queue;
+    while (!queue->shutdown) {
+        pthread_mutex_lock(&queue->queue_mutex);
+        while (!queue->shutdown && !queue->waiting && queue->front == NULL) {
+            pthread_cond_wait(&queue->queue_cond, &queue->queue_mutex);
+        }
+        if (queue->shutdown || (queue->waiting && queue->front == NULL)) {
+            pthread_mutex_unlock(&queue->queue_mutex);
             break;
         }
-        if (sem_wait(&queue->excl_sem) == -1) {
-            printf("SIGNALLED TO STOP EXCL\n");
-            break;
-        }
-        node = pop(queue);
-        sem_post(&queue->excl_sem);
+        dispatch_queue_node_t *node = pop(queue);
+        pthread_mutex_unlock(&queue->queue_mutex);
+        
         node->task->work(node->task->params);
-        task_destroy(node->task);
+        if (node->task->type == SYNC) {
+            // don't destroy task if synchronous
+            // let the dispatch_sycn function do this as we want the semaphore to stay live
+            sem_post(&node->task->sync_sem);
+        } else {
+            task_destroy(node->task);
+        }
         free(node);
     }
 }
@@ -122,7 +168,6 @@ dispatch_queue_node_t *pop(dispatch_queue_t *queue) {
         return NULL;
     } else {
         dispatch_queue_node_t *node = queue->front;
-        node->next = NULL;
         queue->front = queue->front->next;
         if (queue->front == NULL) {
             queue->back = NULL;
