@@ -56,8 +56,10 @@ void dispatch_queue_destroy(dispatch_queue_t *queue) {
 
     for (int i = 0; i < queue->pool_size; ++i) {
         // TODO check if cancel is the best way
-        // if it is, then remove queue::shutdown variable
         pthread_cancel(queue->thread_pool[i]);
+    }
+    for (int i = 0; i < queue->pool_size; ++i) {
+        pthread_join(queue->thread_pool[i], NULL);
     }
     free(queue->thread_pool);
 
@@ -100,7 +102,7 @@ void dispatch_sync(dispatch_queue_t *queue, task_t *task) {
 
 void dispatch_for(dispatch_queue_t *queue, long number, void (*work)(long)) {
     for (long i = 0; i < number; ++i) {
-        task_t *task = task_create((void (*)(void *))work, (void *)i, NULL);
+        task_t *task = task_create((void (*)(void *))work, (void *)i, "");
         dispatch_async(queue, task);
     }
     dispatch_queue_wait(queue);

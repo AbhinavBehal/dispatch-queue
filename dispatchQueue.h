@@ -34,7 +34,7 @@
     typedef struct dispatch_queue_t dispatch_queue_t; // the dispatch queue type
     typedef struct dispatch_queue_thread_t dispatch_queue_thread_t; // the dispatch queue thread type
 
-    // TODO: REMOVE REDUNDANT STUFF FROM THIS
+    // TODO: REMOVE REDUNDANT STUFF FROM THIS (should I be using this?)
     struct dispatch_queue_thread_t {
         dispatch_queue_t *queue;// the queue this thread is associated with
         pthread_t thread;       // the thread which runs the task
