@@ -6,7 +6,7 @@
 #include "dispatchQueue.h"
 
 task_t *task_create(void (* work)(void *), void *param, char* name) {
-    task_t *task = (task_t *)malloc(sizeof(task_t));
+    task_t *task = malloc(sizeof(task_t));
     task->work = work;
     task->params = param;
     strcpy(task->name, name);
@@ -138,7 +138,7 @@ void queue_thread(void *dispatch_queue) {
         node->task->work(node->task->params);
         if (node->task->type == SYNC) {
             // don't destroy task if synchronous
-            // let the dispatch_sycn function do this as we want the semaphore to stay live
+            // let the dispatch_sycn function do this as we want the semaphore to stay alive
             sem_post(&node->task->sync_sem);
         } else {
             task_destroy(node->task);
@@ -147,15 +147,11 @@ void queue_thread(void *dispatch_queue) {
     }
 }
 
-dispatch_queue_node_t *create_node(task_t *task) {
+void push(dispatch_queue_t *queue, task_t *task) {
     dispatch_queue_node_t *node = malloc(sizeof(dispatch_queue_node_t));
     node->task = task;
     node->next = NULL;
-    return node;
-}
 
-void push(dispatch_queue_t *queue, task_t *task) {
-    dispatch_queue_node_t *node = create_node(task);
     if (queue->back == NULL) {
         queue->front = node;
         queue->back = node;
