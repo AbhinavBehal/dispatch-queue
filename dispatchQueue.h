@@ -74,9 +74,9 @@
     
     int dispatch_queue_wait(dispatch_queue_t *);
 
-    void push_queue(dispatch_queue_t *, task_t *);
+    void push_item(dispatch_queue_t *, task_t *);
 
-    dispatch_queue_item_t *pop_queue(dispatch_queue_t *);
+    dispatch_queue_item_t *pop_item(dispatch_queue_t *);
 
     void queue_thread(void *);
 

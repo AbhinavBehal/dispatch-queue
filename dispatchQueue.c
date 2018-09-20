@@ -62,22 +62,18 @@ dispatch_queue_t *dispatch_queue_create(queue_type_t queue_type) {
 
 void dispatch_queue_destroy(dispatch_queue_t *queue) {
     // signal the threads to shutdown
-    pthread_mutex_lock(&queue->queue_mutex);
     queue->shutdown = true;
+    pthread_mutex_lock(&queue->queue_mutex);
     pthread_cond_broadcast(&queue->queue_cond);
     pthread_mutex_unlock(&queue->queue_mutex);
 
-    for (int i = 0; i < queue->pool_size; ++i) {
-        pthread_cancel(queue->thread_pool[i]);
-    }
-    for (int i = 0; i < queue->pool_size; ++i) {
-        pthread_join(queue->thread_pool[i], NULL);
-    }
+    // TODO ask him again if its actually fine to leak memory here
+    // since threads won't get cleaned up without joining
     free(queue->thread_pool);
 
     dispatch_queue_item_t *node = NULL;
     // delete all remaining nodes still in the queue
-    while ((node = pop_queue(queue)) != NULL) {
+    while ((node = pop_item(queue)) != NULL) {
         task_destroy(node->task);
         free(node);
     }
@@ -91,7 +87,7 @@ int dispatch_async(dispatch_queue_t *queue, task_t *task) {
     // ignore the task if the queue is waiting or shutdown
     if (!queue->shutdown && !queue->waiting) {
         task->type = ASYNC;
-        push_queue(queue, task);
+        push_item(queue, task);
         pthread_cond_signal(&queue->queue_cond);
     }
     pthread_mutex_unlock(&queue->queue_mutex);
@@ -103,7 +99,7 @@ int dispatch_sync(dispatch_queue_t *queue, task_t *task) {
     // ignore the task if the queue is waiting or shutdown
     if (!queue->shutdown && !queue->waiting) {
         task->type = SYNC;
-        push_queue(queue, task);
+        push_item(queue, task);
         pthread_cond_signal(&queue->queue_cond);
         pthread_mutex_unlock(&queue->queue_mutex);
         // wait for the task to be completed
@@ -153,7 +149,7 @@ void queue_thread(void *dispatch_queue) {
             pthread_mutex_unlock(&queue->queue_mutex);
             break;
         }
-        dispatch_queue_item_t *node = pop_queue(queue);
+        dispatch_queue_item_t *node = pop_item(queue);
         pthread_mutex_unlock(&queue->queue_mutex);
 
         node->task->work(node->task->params);
@@ -169,8 +165,8 @@ void queue_thread(void *dispatch_queue) {
     }
 }
 
-// Helper function to push_queue tasks onto a queue
-void push_queue(dispatch_queue_t *queue, task_t *task) {
+// Helper function to push tasks onto a queue
+void push_item(dispatch_queue_t *queue, task_t *task) {
     dispatch_queue_item_t *node = malloc(sizeof(dispatch_queue_item_t));
     node->task = task;
     node->next = NULL;
@@ -185,7 +181,7 @@ void push_queue(dispatch_queue_t *queue, task_t *task) {
 }
 
 // Helper function to extract the task currently at the front of a queue
-dispatch_queue_item_t *pop_queue(dispatch_queue_t *queue) {
+dispatch_queue_item_t *pop_item(dispatch_queue_t *queue) {
     if (queue->front == NULL) {
         return NULL;
     } else {
