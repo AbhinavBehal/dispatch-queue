@@ -53,7 +53,7 @@ dispatch_queue_t *dispatch_queue_create(queue_type_t queue_type) {
     // create all the threads in the thread pool
     for (int i = 0; i < queue->pool_size; ++i) {
         if (pthread_create(&queue->thread_pool[i], NULL, (void *)queue_thread,
-                            (void *)queue))
+                           (void *)queue))
             error_exit("Could not create thread\n");
     }
 
@@ -147,7 +147,7 @@ void queue_thread(void *dispatch_queue) {
         while (!queue->shutdown && !queue->waiting && queue->front == NULL) {
             pthread_cond_wait(&queue->queue_cond, &queue->queue_mutex);
         }
-        // if the queue is shutdown, or is waiting and the queue empty, the
+        // if the queue is shutdown, or is waiting and the queue is empty, the
         // thread should stop running
         if (queue->shutdown || (queue->waiting && queue->front == NULL)) {
             pthread_mutex_unlock(&queue->queue_mutex);
