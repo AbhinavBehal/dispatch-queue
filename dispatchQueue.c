@@ -67,8 +67,6 @@ void dispatch_queue_destroy(dispatch_queue_t *queue) {
     pthread_cond_broadcast(&queue->queue_cond);
     pthread_mutex_unlock(&queue->queue_mutex);
 
-    // TODO ask him again if its actually fine to leak memory here
-    // since threads won't get cleaned up without joining
     free(queue->thread_pool);
 
     dispatch_queue_item_t *node = NULL;
@@ -140,6 +138,7 @@ void queue_thread(void *dispatch_queue) {
     while (!queue->shutdown) {
         pthread_mutex_lock(&queue->queue_mutex);
         // wait for an item to be added to the queue if it's currently empty
+        // need a while loop here in case of spurious wake-ups from cond_wait
         while (!queue->shutdown && !queue->waiting && queue->front == NULL) {
             pthread_cond_wait(&queue->queue_cond, &queue->queue_mutex);
         }
