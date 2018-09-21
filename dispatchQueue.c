@@ -69,12 +69,15 @@ void dispatch_queue_destroy(dispatch_queue_t *queue) {
 
     free(queue->thread_pool);
 
+    pthread_mutex_lock(&queue->queue_mutex);
     dispatch_queue_item_t *item = NULL;
     // delete all remaining items still in the queue
     while ((item = pop_item(queue)) != NULL) {
         task_destroy(item->task);
         free(item);
     }
+    pthread_mutex_unlock(&queue->queue_mutex);
+
     pthread_mutex_destroy(&queue->queue_mutex);
     pthread_cond_destroy(&queue->queue_cond);
     free(queue);
