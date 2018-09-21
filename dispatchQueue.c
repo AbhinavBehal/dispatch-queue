@@ -69,11 +69,11 @@ void dispatch_queue_destroy(dispatch_queue_t *queue) {
 
     free(queue->thread_pool);
 
-    dispatch_queue_item_t *node = NULL;
-    // delete all remaining nodes still in the queue
-    while ((node = pop_item(queue)) != NULL) {
-        task_destroy(node->task);
-        free(node);
+    dispatch_queue_item_t *item = NULL;
+    // delete all remaining items still in the queue
+    while ((item = pop_item(queue)) != NULL) {
+        task_destroy(item->task);
+        free(item);
     }
     pthread_mutex_destroy(&queue->queue_mutex);
     pthread_cond_destroy(&queue->queue_cond);
@@ -148,34 +148,34 @@ void queue_thread(void *dispatch_queue) {
             pthread_mutex_unlock(&queue->queue_mutex);
             break;
         }
-        dispatch_queue_item_t *node = pop_item(queue);
+        dispatch_queue_item_t *item = pop_item(queue);
         pthread_mutex_unlock(&queue->queue_mutex);
 
-        node->task->work(node->task->params);
-        if (node->task->type == SYNC) {
+        item->task->work(item->task->params);
+        if (item->task->type == SYNC) {
             // don't destroy the task if synchronous
             // let the dispatch_sync function do this as we want the semaphore
             // to stay alive
-            sem_post(&node->task->sync_sem);
+            sem_post(&item->task->sync_sem);
         } else {
-            task_destroy(node->task);
+            task_destroy(item->task);
         }
-        free(node);
+        free(item);
     }
 }
 
 // Helper function to push tasks onto a queue
 void push_item(dispatch_queue_t *queue, task_t *task) {
-    dispatch_queue_item_t *node = malloc(sizeof(dispatch_queue_item_t));
-    node->task = task;
-    node->next = NULL;
+    dispatch_queue_item_t *item = malloc(sizeof(dispatch_queue_item_t));
+    item->task = task;
+    item->next = NULL;
 
     if (queue->back == NULL) {
-        queue->front = node;
-        queue->back = node;
+        queue->front = item;
+        queue->back = item;
     } else {
-        queue->back->next = node;
-        queue->back = node;
+        queue->back->next = item;
+        queue->back = item;
     }
 }
 
@@ -184,11 +184,11 @@ dispatch_queue_item_t *pop_item(dispatch_queue_t *queue) {
     if (queue->front == NULL) {
         return NULL;
     } else {
-        dispatch_queue_item_t *node = queue->front;
+        dispatch_queue_item_t *item = queue->front;
         queue->front = queue->front->next;
         if (queue->front == NULL) {
             queue->back = NULL;
         }
-        return node;
+        return item;
     }
 }
